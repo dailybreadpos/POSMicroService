@@ -18,7 +18,7 @@ import com.coder.pema.posmicroservice.entity.Sales;
 import com.coder.pema.posmicroservice.service.SalesService;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/pos")
 public class SaleRestController {
 
     private SalesService salesService;
