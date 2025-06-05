@@ -1,6 +1,7 @@
 package com.coder.pema.posmicroservice.dto;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import com.coder.pema.posmicroservice.entity.Sales;
@@ -16,6 +17,6 @@ public class GetSaleResponse {
     private Long id;
     private float cash;
     private float digital;
-    private LocalDateTime date;
+    private OffsetDateTime date;
     private List<Item> items;
 }

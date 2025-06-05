@@ -1,5 +1,6 @@
 package com.coder.pema.posmicroservice.service;
 
+import java.time.LocalDate; // Import LocalDate
 import java.util.List;
 
 import com.coder.pema.posmicroservice.dto.GetSaleResponse;
@@ -15,4 +16,13 @@ public interface SalesService {
     public List<Sales> getAllSales();
 
     public List<GetSaleResponse> getAllSalesWithItems();
+
+    /**
+     * Retrieves a list of sales (as GetSaleResponse DTOs) for a specific date,
+     * including their associated items.
+     * 
+     * @param date The LocalDate to filter sales by.
+     * @return A list of GetSaleResponse objects.
+     */
+    public List<GetSaleResponse> getSalesByDateWithItems(LocalDate date); // New method
 }

@@ -2,6 +2,7 @@ package com.coder.pema.posmicroservice.entity;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import jakarta.annotation.Generated;
@@ -43,7 +44,7 @@ public class Sales {
     private float cash;
 
     @Column(name = "date", nullable = false)
-    private LocalDateTime date;
+    private OffsetDateTime date;
 
     @OneToMany(mappedBy = "sales", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<SalesItem> items;

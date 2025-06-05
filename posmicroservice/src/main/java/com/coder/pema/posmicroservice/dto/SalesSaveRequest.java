@@ -2,6 +2,7 @@ package com.coder.pema.posmicroservice.dto;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 import lombok.Getter;
@@ -14,6 +15,6 @@ public class SalesSaveRequest {
     private float digital;
     private float cash;
     private List<Item> items;
-    private LocalDateTime date;
+    private OffsetDateTime date;
 
 }
