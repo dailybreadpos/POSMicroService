@@ -1,20 +1,19 @@
 package com.coder.pema.posmicroservice.dto;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime; // Changed from OffsetDateTime
 import java.util.List;
 
-import lombok.Getter;
-import lombok.Setter;
-
-@Getter
-@Setter
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class SalesSaveRequest {
-
-    private float digital;
     private float cash;
+    private float digital;
+    private LocalDateTime date; // Changed to LocalDateTime to represent local time
+    private Integer offsetHours; // Added to capture client's timezone offset at time of sale
     private List<Item> items;
-    private OffsetDateTime date;
-
 }

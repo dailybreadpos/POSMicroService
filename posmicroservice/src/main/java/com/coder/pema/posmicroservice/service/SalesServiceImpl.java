@@ -1,6 +1,8 @@
 package com.coder.pema.posmicroservice.service;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime; // Import OffsetDateTime
+import java.time.ZoneOffset; // Import ZoneOffset
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -9,8 +11,6 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-// import org.springframework.web.reactive.function.client.WebClient; // No longer needed for this communication
-// import reactor.core.publisher.Mono; // No longer needed for this communication
 
 import com.coder.pema.posmicroservice.dao.SaleDAO;
 import com.coder.pema.posmicroservice.dto.GetSaleResponse;
@@ -19,16 +19,16 @@ import com.coder.pema.posmicroservice.dto.SalesSaveRequest;
 import com.coder.pema.posmicroservice.entity.Sales;
 import com.coder.pema.posmicroservice.entity.SalesItem;
 import com.coder.pema.posmicroservice.entity.SalesItemId;
-import com.coder.pema.posmicroservice.client.InventoryClient; // Import the new Feign client
+import com.coder.pema.posmicroservice.client.InventoryClient;
 
 @Service
 public class SalesServiceImpl implements SalesService {
 
     private final SaleDAO saleDAO;
-    private final InventoryClient inventoryClient; // Inject Feign client
+    private final InventoryClient inventoryClient;
 
     @Autowired
-    public SalesServiceImpl(SaleDAO saleDAO, InventoryClient inventoryClient) { // Update constructor
+    public SalesServiceImpl(SaleDAO saleDAO, InventoryClient inventoryClient) {
         this.saleDAO = saleDAO;
         this.inventoryClient = inventoryClient;
     }
@@ -41,7 +41,15 @@ public class SalesServiceImpl implements SalesService {
             salesEntity.setCash(sales.getCash());
             salesEntity.setDigital(sales.getDigital());
             salesEntity.setGrandTotalPrice(sales.getCash() + sales.getDigital());
-            salesEntity.setDate(sales.getDate());
+
+            // CRITICAL FIX: Construct OffsetDateTime from LocalDateTime and offsetHours
+            // This ensures the stored date correctly represents the client's local time +
+            // offset
+            ZoneOffset clientZoneOffset = ZoneOffset
+                    .ofHours(sales.getOffsetHours() != null ? sales.getOffsetHours() : 0);
+            OffsetDateTime transactionOffsetDateTime = OffsetDateTime.of(sales.getDate(), clientZoneOffset);
+            salesEntity.setDate(transactionOffsetDateTime); // Set the correctly offset date
+
             Sales newSales = saleDAO.saveSales(salesEntity);
 
             if (newSales == null) {
@@ -72,39 +80,35 @@ public class SalesServiceImpl implements SalesService {
         }
     }
 
-    /**
-     * Helper method to fetch product details from the Inventory microservice using
-     * Feign Client.
-     * 
-     * @param itemId The ID of the inventory item to fetch.
-     * @return A CompletableFuture of an Item (ProductDTO structure) or null if not
-     *         found/error.
-     */
+    private static class InventoryProductResponse {
+        public Long id;
+        public String name;
+        public String description;
+        public String image;
+        public double price;
+        public int stock;
+        public String category;
+    }
+
     private CompletableFuture<Item> fetchProductDetails(Long itemId) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                // Call the Feign client directly
                 InventoryClient.InventoryProductResponse invProduct = inventoryClient.getProductDetails(itemId);
-
                 Item itemDetail = new Item();
                 itemDetail.setItemId(invProduct.id);
                 itemDetail.setName(invProduct.name);
                 itemDetail.setDescription(invProduct.description);
                 itemDetail.setImage(invProduct.image);
                 itemDetail.setPrice(invProduct.price);
-                // Optionally set stock or category if needed on the frontend
-                // itemDetail.setStock(invProduct.stock);
-                // itemDetail.setCategory(invProduct.category);
                 return itemDetail;
             } catch (Exception e) {
                 System.err.println(
                         "Feign Client Error fetching product details for ID " + itemId + ": " + e.getMessage());
-                e.printStackTrace(); // Print stack trace for better debugging
+                e.printStackTrace();
 
-                // Provide a fallback item on error
                 Item fallbackItem = new Item();
                 fallbackItem.setItemId(itemId);
-                fallbackItem.setQuantity(0); // Quantity will be set later by SalesItem
+                fallbackItem.setQuantity(0);
                 fallbackItem.setName("Unknown Product (ID: " + itemId + ")");
                 fallbackItem.setDescription("Details not available");
                 fallbackItem.setPrice(0.0);
@@ -114,19 +118,11 @@ public class SalesServiceImpl implements SalesService {
         });
     }
 
-    /**
-     * Converts a Sales entity to GetSaleResponse DTO, enriching SalesItem with
-     * product details.
-     * 
-     * @param sales The Sales entity to convert.
-     * @return A CompletableFuture of GetSaleResponse with enriched item details.
-     */
     private CompletableFuture<GetSaleResponse> convertSalesToGetSaleResponseWithProductDetails(Sales sales) {
         List<CompletableFuture<Item>> itemDetailsFutures = sales.getItems().stream()
                 .map(salesItem -> fetchProductDetails(salesItem.getSalesItemId().getItemId())
                         .thenApply(productDetail -> {
-                            // Combine sales item quantity with product details
-                            productDetail.setQuantity(salesItem.getQuantity()); // Use setter for quantity
+                            productDetail.setQuantity(salesItem.getQuantity());
                             return productDetail;
                         }))
                 .collect(Collectors.toList());
@@ -137,7 +133,7 @@ public class SalesServiceImpl implements SalesService {
                     response.setId(sales.getId());
                     response.setCash(sales.getCash());
                     response.setDigital(sales.getDigital());
-                    response.setDate(sales.getDate());
+                    response.setDate(sales.getDate()); // Date is already OffsetDateTime in Sales entity
                     response.setItems(itemDetailsFutures.stream()
                             .map(CompletableFuture::join)
                             .collect(Collectors.toList()));
@@ -181,8 +177,8 @@ public class SalesServiceImpl implements SalesService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<GetSaleResponse> getSalesByDateWithItems(LocalDate date) {
-        List<Sales> salesList = saleDAO.findSalesByDate(date);
+    public List<GetSaleResponse> getSalesByDateWithItems(LocalDate date, Integer offsetHours) {
+        List<Sales> salesList = saleDAO.findSalesByDate(date, offsetHours);
 
         List<CompletableFuture<GetSaleResponse>> futures = salesList.stream()
                 .map(this::convertSalesToGetSaleResponseWithProductDetails)

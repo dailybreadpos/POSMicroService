@@ -3,9 +3,9 @@ package com.coder.pema.posmicroservice.dao;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneOffset; // Import ZoneOffset
 import java.util.List;
-import java.util.Optional; // Import Optional
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
@@ -22,7 +22,7 @@ import jakarta.persistence.TypedQuery;
 @Repository
 public class SaleDAOImpl implements SaleDAO {
 
-    private final EntityManager entityManager; // Make final as it's injected
+    private final EntityManager entityManager;
 
     @Autowired
     public SaleDAOImpl(EntityManager entityManager) {
@@ -35,7 +35,7 @@ public class SaleDAOImpl implements SaleDAO {
             return entityManager.merge(sales);
         } catch (Exception e) {
             System.out.println("Failed to save sale " + e.getMessage());
-            e.printStackTrace(); // Print stack trace for better debugging
+            e.printStackTrace();
             return null;
         }
     }
@@ -47,7 +47,7 @@ public class SaleDAOImpl implements SaleDAO {
             return true;
         } catch (Exception e) {
             System.out.println("failed to save salesitem " + e.getMessage());
-            e.printStackTrace(); // Print stack trace for better debugging
+            e.printStackTrace();
             return false;
         }
     }
@@ -55,10 +55,6 @@ public class SaleDAOImpl implements SaleDAO {
     @Override
     public GetSaleResponse getSales(String saleId) {
         try {
-            // This query fetches a Sales entity but eager loads items for conversion to
-            // GetSaleResponse
-            // This method is intended to be used directly by the REST controller if a
-            // simple DTO is needed
             TypedQuery<Sales> query = entityManager.createQuery(
                     "SELECT s FROM Sales s LEFT JOIN FETCH s.items WHERE s.id = :saleId", Sales.class);
             query.setParameter("saleId", Long.valueOf(saleId));
@@ -73,7 +69,6 @@ public class SaleDAOImpl implements SaleDAO {
                 Item itemRes = new Item();
                 itemRes.setItemId(item.getSalesItemId().getItemId());
                 itemRes.setQuantity(item.getQuantity());
-                // No product details here, as this DTO is simple
                 return itemRes;
             }).toList();
             response.setItems(items);
@@ -83,7 +78,7 @@ public class SaleDAOImpl implements SaleDAO {
             return null;
         } catch (Exception e) {
             System.out.println("error in getting sale " + e.getMessage());
-            e.printStackTrace(); // Print stack trace for better debugging
+            e.printStackTrace();
             return null;
         }
     }
@@ -96,7 +91,7 @@ public class SaleDAOImpl implements SaleDAO {
             return sales;
         } catch (Exception e) {
             System.out.println("Error " + e.getMessage());
-            e.printStackTrace(); // Print stack trace for better debugging
+            e.printStackTrace();
             return null;
         }
     }
@@ -123,45 +118,60 @@ public class SaleDAOImpl implements SaleDAO {
         }).toList();
     }
 
+    /**
+     * Retrieves a list of Sales entities for a specific local date and timezone
+     * offset,
+     * including their associated items.
+     * Correctly handles timezone conversion to query the UTC-stored OffsetDateTime.
+     * 
+     * @param localDate   The LocalDate (local date) from the client.
+     * @param offsetHours The timezone offset from UTC in hours (e.g., 6 for UTC+6).
+     * @return A list of Sales entities.
+     */
     @Override
-    public List<Sales> findSalesByDate(LocalDate date) {
-        OffsetDateTime startOfDay = OffsetDateTime.of(date, LocalTime.MIN, ZoneOffset.UTC);
-        OffsetDateTime endOfDay = OffsetDateTime.of(date, LocalTime.MAX, ZoneOffset.UTC);
+    public List<Sales> findSalesByDate(LocalDate localDate, Integer offsetHours) {
+        // Construct the ZoneOffset from the provided hours
+        ZoneOffset userZoneOffset = ZoneOffset.ofHours(offsetHours != null ? offsetHours : 0);
 
-        String jpql = "SELECT s FROM Sales s LEFT JOIN FETCH s.items WHERE s.date >= :startOfDay AND s.date <= :endOfDay";
+        // Define the start and end of the day in the user's *local* timezone
+        OffsetDateTime startOfDayInUserZone = OffsetDateTime.of(localDate, LocalTime.MIN, userZoneOffset);
+        OffsetDateTime endOfDayInUserZone = OffsetDateTime.of(localDate, LocalTime.MAX, userZoneOffset);
+
+        // Convert these local OffsetDateTimes to UTC OffsetDateTimes for database
+        // query.
+        // This is crucial because dates are stored in UTC in the database.
+        OffsetDateTime startOfDayUtc = startOfDayInUserZone.withOffsetSameInstant(ZoneOffset.UTC);
+        OffsetDateTime endOfDayUtc = endOfDayInUserZone.withOffsetSameInstant(ZoneOffset.UTC);
+
+        String jpql = "SELECT s FROM Sales s LEFT JOIN FETCH s.items WHERE s.date >= :startOfDayUtc AND s.date <= :endOfDayUtc";
         TypedQuery<Sales> query = entityManager.createQuery(jpql, Sales.class);
-        query.setParameter("startOfDay", startOfDay);
-        query.setParameter("endOfDay", endOfDay);
+        query.setParameter("startOfDayUtc", startOfDayUtc);
+        query.setParameter("endOfDayUtc", endOfDayUtc);
 
         try {
             List<Sales> sales = query.getResultList();
             return sales;
         } catch (Exception e) {
             System.out.println("Error finding sales by date: " + e.getMessage());
-            e.printStackTrace(); // Print stack trace for better debugging
+            e.printStackTrace();
             return List.of();
         }
     }
 
-    /**
-     * Implementation of the new method to find a Sales entity by ID with its items.
-     */
     @Override
     public Optional<Sales> findByIdWithItems(Long saleId) {
         try {
-            // Use LEFT JOIN FETCH to eagerly load SalesItem entities
             Sales sales = entityManager.createQuery(
                     "SELECT s FROM Sales s LEFT JOIN FETCH s.items WHERE s.id = :saleId", Sales.class)
                     .setParameter("saleId", saleId)
                     .getSingleResult();
             return Optional.of(sales);
         } catch (NoResultException e) {
-            // No result means no Sales found for the given ID
             return Optional.empty();
         } catch (Exception e) {
             System.out.println("Error finding sale by ID with items: " + e.getMessage());
             e.printStackTrace();
-            return Optional.empty(); // Return empty on other errors
+            return Optional.empty();
         }
     }
 }
